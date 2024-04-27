@@ -55,6 +55,9 @@ public class WindowPnl extends JPanel {
     private void openFile(){
 
     }
+    private void newTrip(){
+
+    }
 
     private void filter(int option) { //
         System.out.println(option);
@@ -105,6 +108,14 @@ public class WindowPnl extends JPanel {
         tripData.add(typeTF);
         Utils.makeCompactGrid(tripData, 3, 2, 5, 5, 5, 10);
         pnl.add(tripData);
+        JButton newTripBtn = new JButton("Nuevo viaje");
+        newTripBtn.setForeground(mainTextColor);
+        newTripBtn.setBackground(buttonColor);
+        newTripBtn.addActionListener(e ->  newTrip());
+        JPanel pnl3 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        pnl3.setOpaque(false);
+        pnl3.add(newTripBtn);
+        pnl.add(pnl3);
         return pnl;
     }
 
