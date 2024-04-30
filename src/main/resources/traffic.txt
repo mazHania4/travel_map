@@ -1,0 +1,5 @@
+Nodo2|Nodo1|17|19|15
+Nodo6|Nodo4|12|13|35
+Nodo1|Nodo7|11|14|55
+Nodo3|Nodo5|19|21|40
+Nodo4|Nodo5|9|12|18

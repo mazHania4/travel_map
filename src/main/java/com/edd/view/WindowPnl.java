@@ -1,8 +1,19 @@
 package com.edd.view;
 
+import com.edd.controller.GraphsCtr;
+import com.edd.controller.GraphvizCtr;
+import com.edd.controller.Tree;
+import com.edd.graphs.Node;
+import com.edd.graphs.Route;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class WindowPnl extends JPanel {
     private static final Color buttonColor = new Color(68, 94, 74);
@@ -18,13 +29,29 @@ public class WindowPnl extends JPanel {
 
     private JTextField originTF, destTF, typeTF;
     private JComboBox<String> nextNodeCB;
+    private JLabel imgLbl;
     private JTable worstTable;
+    private GraphsCtr graphs;
+    private Tree tree;
+    private final GraphvizCtr graphviz;
+    private int graphCounter, filter, currTime;
+    private Node actualNode;
+
+    private String selectedOrigin, selectedDestination, selectedTripType;
 
 
     public WindowPnl(){
+        graphviz = new GraphvizCtr();
+        graphCounter = 0;
+        currTime = 0;
+        filter = 1;
+        actualNode = null;
+        graphs = null;
+        tree = null;
+        selectedOrigin = "";
+
         setLayout(new BorderLayout());
         setBackground(bgColor);
-
         //----------- Menu ------------------------------------
         JMenuBar menu = new JMenuBar();
         menu.setBackground(menuColor);
@@ -47,24 +74,138 @@ public class WindowPnl extends JPanel {
         sideBar.add(filterPnl()); //----------- Options to filter the routes ------------------
         sideBar.add(Utils.separatorH(bordersColor));
         sideBar.add(worstRoutesPnl()); //----------- Worst Routes by filter ------------------
-
         add(sideBar, BorderLayout.WEST);
+
+        JPanel mainPnl = mainPnl();
+        add(mainPnl, BorderLayout.CENTER);
+
+
+    }
+
+    private void updateImg(java.util.List<Node> nodes, List<Node> route, int lblCase){
+        try {
+            graphviz.mapGraph(nodes, route, selectedOrigin, graphCounter, lblCase);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        imgLbl.setIcon(null);
+        imgLbl.revalidate();
+        imgLbl.repaint();
+        String path = "src/main/resources/generated/map_"+graphCounter+".png";
+        ImageIcon imageIcon = new ImageIcon(path);
+        imgLbl.setIcon(imageIcon);
+        imgLbl.revalidate();
+        imgLbl.repaint();
+        graphCounter++;
 
     }
 
     private void openFile(){
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Seleccionar Archivos");
+        fileChooser.setMultiSelectionEnabled(true);
+        int userSelection = fileChooser.showOpenDialog(this);
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            File[] selectedFiles = fileChooser.getSelectedFiles();
+            if (selectedFiles.length != 2) {
+                JOptionPane.showMessageDialog(this, "Por favor, seleccione exactamente 2 archivos .txt", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            try {
+                String routesContent = readFile(selectedFiles[0]);
+                String trafficContent = readFile(selectedFiles[1]);
+                graphs = new GraphsCtr(routesContent, trafficContent);
+                updateImg(graphs.getNodes().values().stream().toList(), new ArrayList<>(), 1);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Error al leer los archivos", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
 
+    private String readFile(File file) throws IOException {
+        StringBuilder content = new StringBuilder();
+        BufferedReader reader = new BufferedReader(new FileReader(file));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            content.append(line).append("\n");
+        }
+        reader.close();
+        return content.toString();
+    }
+
+    private void treeGraph(){
+        if (tree != null){
+
+        }
     }
     private void newTrip(){
+        if (graphs != null){
+            JFrame newTripFrame = new JFrame("Selección de Viaje");
+            newTripFrame.setLocationRelativeTo(null);
+            JPanel panel = new JPanel();
+            String[] nodes = graphs.getNodes().keySet().toArray(new String[0]);
+            ArrayList<String> tripType = new ArrayList<>();
+            tripType.add("Caminando");
+            tripType.add("Vehículo");
+            JComboBox<String> originCB = new JComboBox<>(nodes);
+            JComboBox<String> destinationCB = new JComboBox<>(nodes);
+            JComboBox<String> tripTypeCB = new JComboBox<>(tripType.toArray(new String[0]));
+            JButton continueBtn = new JButton("Continuar");
+            continueBtn.addActionListener(e -> {
+                    selectedOrigin = (String) originCB.getSelectedItem();
+                    selectedDestination = (String) destinationCB.getSelectedItem();
+                    selectedTripType = (String) tripTypeCB.getSelectedItem();
+                    if (selectedDestination.equals(selectedOrigin)){
+                        JOptionPane.showMessageDialog(this, "El origen y el destino no pueden ser el mismo", "Error", JOptionPane.ERROR_MESSAGE);
+                    } else {
+                        originTF.setText(selectedOrigin);
+                        destTF.setText(selectedDestination);
+                        typeTF.setText(selectedTripType);
+                        actualNode = graphs.getNodes().get(selectedOrigin);
+                        nextNodeCB.setEnabled(true);
+                        updateTrip();
+                        newTripFrame.dispose();
+                    }
+                }
+            );
 
+            panel.add(new JLabel("Origen:"));
+            panel.add(originCB);
+            panel.add(new JLabel("Destino:"));
+            panel.add(destinationCB);
+            panel.add(new JLabel("Tipo de Viaje:"));
+            panel.add(tripTypeCB);
+            panel.add(continueBtn);
+            newTripFrame.getContentPane().add(panel);
+            newTripFrame.pack();
+            newTripFrame.setVisible(true);
+        }
     }
 
-    private void filter(int option) { //
-        System.out.println(option);
+    private void updateTrip(){
+        if (!selectedOrigin.isEmpty() && !selectedOrigin.equals(selectedDestination)) {
+            List<Route> routes = graphs.findAllRoutes(selectedOrigin, selectedDestination, selectedTripType.equals("Vehículo"), currTime);
+            //System.out.println("generadas:\n" + routes);
+            tree = new Tree(filter);
+            routes.forEach(r -> tree.insert(r));
+            List<Route> routesInOrder = tree.inOrder();
+            //System.out.println("ordenadas:\n" + routesInOrder);
+            updateImg(graphs.getNodes().values().stream().toList(), routesInOrder.get(0).getSteps(), filter);
+            nextNodeCB.removeAllItems();
+            Set<String> nextIds = new HashSet<>();
+            routesInOrder.forEach(r-> nextIds.add(r.getSteps().get(1).getId()));
+            nextIds.forEach(n -> nextNodeCB.addItem(n));
+            // update worst table
+        }
     }
+
 
     private void moveForward() { //to the next node
-
+        if (graphs != null){
+            selectedOrigin = (String) nextNodeCB.getSelectedItem();
+            actualNode = graphs.getNodes().get(selectedOrigin);
+            updateTrip();
+        }
     }
 
     private JPanel tripDataPnl(){
@@ -112,8 +253,14 @@ public class WindowPnl extends JPanel {
         newTripBtn.setForeground(mainTextColor);
         newTripBtn.setBackground(buttonColor);
         newTripBtn.addActionListener(e ->  newTrip());
+        JButton treeBtn = new JButton("Ver árbol");
+        treeBtn.setForeground(mainTextColor);
+        treeBtn.setBackground(buttonColor);
+        treeBtn.addActionListener(e ->  treeGraph());
         JPanel pnl3 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         pnl3.setOpaque(false);
+        pnl3.add(treeBtn);
+        pnl3.add(Box.createRigidArea(new Dimension(5, 10)));
         pnl3.add(newTripBtn);
         pnl.add(pnl3);
         return pnl;
@@ -158,28 +305,28 @@ public class WindowPnl extends JPanel {
         title.setForeground(mainTextColor);
         pnl2.add(title);
         pnl2.add(Box.createRigidArea(new Dimension(0, 10)));
-        JRadioButton gasRBtn = new JRadioButton("Gasolina");
-        gasRBtn.addActionListener(e -> filter(1));
+        JRadioButton gasRBtn = new JRadioButton("Distancia");
+        gasRBtn.addActionListener(e -> { filter = 1; updateTrip(); });
         gasRBtn.setOpaque(false);
         gasRBtn.setForeground(textColor);
         JRadioButton fatigueRBtn = new JRadioButton("Desgaste físico");
-        fatigueRBtn.addActionListener(e -> filter(2));
+        fatigueRBtn.addActionListener(e -> { filter = 2; updateTrip(); });
         fatigueRBtn.setOpaque(false);
         fatigueRBtn.setForeground(textColor);
-        JRadioButton distanceRBtn = new JRadioButton("Distancia");
-        distanceRBtn.addActionListener(e -> filter(3));
+        JRadioButton distanceRBtn = new JRadioButton("Gasolina");
+        distanceRBtn.addActionListener(e -> { filter = 3; updateTrip(); });
         distanceRBtn.setOpaque(false);
         distanceRBtn.setForeground(textColor);
-        JRadioButton gas_distanceRBtn = new JRadioButton("Gasolina y distancia");
-        gas_distanceRBtn.addActionListener(e -> filter(4));
+        JRadioButton gas_distanceRBtn = new JRadioButton("Desgaste físico y distancia");
+        gas_distanceRBtn.addActionListener(e -> { filter = 4; updateTrip(); });
         gas_distanceRBtn.setOpaque(false);
         gas_distanceRBtn.setForeground(textColor);
-        JRadioButton fatigue_distanceRBtn = new JRadioButton("Desgaste físico y distancia");
-        fatigue_distanceRBtn.addActionListener(e -> filter(5));
+        JRadioButton fatigue_distanceRBtn = new JRadioButton("Gasolina y distancia");
+        fatigue_distanceRBtn.addActionListener(e -> { filter = 5; updateTrip(); });
         fatigue_distanceRBtn.setOpaque(false);
         fatigue_distanceRBtn.setForeground(textColor);
         JRadioButton speedRBtn = new JRadioButton("Rapidez");
-        speedRBtn.addActionListener(e -> filter(6));
+        speedRBtn.addActionListener(e -> { filter = 6; updateTrip(); });
         speedRBtn.setOpaque(false);
         speedRBtn.setForeground(textColor);
         ButtonGroup BtnGroup = new ButtonGroup();
@@ -217,6 +364,41 @@ public class WindowPnl extends JPanel {
         JScrollPane sp = new JScrollPane(worstTable);
 
         pnl.add(sp);
+        return pnl;
+    }
+
+    private JPanel mainPnl(){
+        JPanel pnl = new JPanel();
+        pnl.setOpaque(false);
+        pnl.setLayout(new BoxLayout(pnl, BoxLayout.Y_AXIS));
+        pnl.setBorder(new EmptyBorder(15,15,20,15));
+        JPanel pnl2 = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        pnl2.setOpaque(false);
+        JLabel timeLbl = new JLabel("Hora actual:");
+        timeLbl.setForeground(mainTextColor);
+        pnl2.add(timeLbl);
+        JTextField timeTF = new JTextField(4);
+        timeTF.setText(String.valueOf(currTime));
+        timeTF.setEditable(false);
+        timeTF.setBackground(tfsColor);
+        timeTF.setBorder(new EmptyBorder(3,4,3,4));
+        timeTF.setForeground(highlightTextColor);
+        pnl2.add(timeTF);
+        JButton changeTimeBtn = new JButton("Cambiar hora");
+        changeTimeBtn.setForeground(mainTextColor);
+        changeTimeBtn.setBackground(buttonColor);
+        changeTimeBtn.addActionListener(e ->  {
+            currTime = Integer.parseInt(JOptionPane.showInputDialog("Escriba la nueva hora"));
+            timeTF.setText(String.valueOf(currTime));
+        });
+        pnl2.add(changeTimeBtn);
+        JPanel pnl3 = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        pnl3.setOpaque(false);
+        imgLbl = new JLabel();
+        pnl3.add(imgLbl);
+        pnl.add(pnl2);
+        pnl.add(Box.createRigidArea(new Dimension(0, 10)));
+        pnl.add(pnl3);
         return pnl;
     }
 }

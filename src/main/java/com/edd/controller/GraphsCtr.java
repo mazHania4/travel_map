@@ -1,46 +1,44 @@
 package com.edd.controller;
 
 import com.edd.graphs.*;
+import lombok.Getter;
 
 import java.util.*;
 
+@Getter
 public class GraphsCtr {
     private final HashMap<String, Node> nodes;
 
-    public List<Route> findAllRoutes(String originId, String destinationId, boolean isByCar) {
+    public List<Route> findAllRoutes(String originId, String destinationId, boolean isByCar, int currTime) {
         List<Route> allRoutes = new ArrayList<>();
         List<Connection> currConnections = new ArrayList<>();
         Set<String> visited = new HashSet<>();
         Connection start = Connection.builder().hasWay(true).to(nodes.get(originId))
                 .timeByCar(0).timeByFoot(0).gas(0).fatigue(0).distance(0).traffic(0).start_traffic(-1).end_traffic(-1).build();
-        dfs(start, destinationId, currConnections, allRoutes, visited, isByCar);
+        dfs(start, destinationId, currConnections, allRoutes, visited, isByCar, currTime);
         return allRoutes;
     }
 
-    private void dfs(Connection connection, String destinationId, List<Connection> currConnections, List<Route> allRoutes, Set<String> visited, boolean isByCar) {
+    private void dfs(Connection connection, String destinationId, List<Connection> currConnections, List<Route> allRoutes, Set<String> visited, boolean isByCar, int currTime) {
         Node node = connection.getTo();
         visited.add(node.getId());
         currConnections.add(connection);
         if (node.getId().equals(destinationId)) {
-            allRoutes.add( new Route(new ArrayList<>(currConnections), isByCar, getCurrTime()) );
+            allRoutes.add( new Route(new ArrayList<>(currConnections), isByCar, currTime) );
         } else {
             for (Connection c : node.getConnections()) {
                 Node adjacent = c.getTo();
                 if (isByCar) {
                     if (!visited.contains(adjacent.getId()) && c.isHasWay())
-                        dfs(c, destinationId, currConnections, allRoutes, visited, true);
+                        dfs(c, destinationId, currConnections, allRoutes, visited, true, currTime);
                 } else {
                     if (!visited.contains(adjacent.getId()))
-                        dfs(c, destinationId, currConnections, allRoutes, visited, false);
+                        dfs(c, destinationId, currConnections, allRoutes, visited, false, currTime);
                 }
             }
         }
         currConnections.remove(currConnections.size()-1);
         visited.remove(node.getId());
-    }
-
-    private int getCurrTime() {
-        return 2;
     }
 
 
@@ -79,6 +77,8 @@ public class GraphsCtr {
                             .gas(Integer.parseInt(d[4]))
                             .fatigue(Integer.parseInt(d[5]))
                             .distance(Integer.parseInt(d[6]))
+                            .start_traffic(-1)
+                            .end_traffic(-1)
                         .build()
                 );
                 to.getConnections().add(
@@ -90,6 +90,8 @@ public class GraphsCtr {
                                 .gas(Integer.parseInt(d[4]))
                                 .fatigue(Integer.parseInt(d[5]))
                                 .distance(Integer.parseInt(d[6]))
+                                .start_traffic(-1)
+                                .end_traffic(-1)
                                 .build()
                 );
             }

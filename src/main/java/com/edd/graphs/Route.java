@@ -19,16 +19,15 @@ public class Route {
         for (Connection c: connections) {
             steps.add(c.getTo());
             distance += c.getDistance();
-            if (isByCar){
-                gas += c.getGas();
-                timeByCar = ( (actualTime >= c.getStart_traffic()) && (actualTime <= c.getEnd_traffic()) )
-                        ? (timeByCar + c.getTimeByCar()) * (c.getTraffic()/100)
-                        : (timeByCar + c.getTimeByCar());
-            } else {
-                fatigue += c.getFatigue();
-                timeByFoot += c.getTimeByFoot();
-            }
+            gas += c.getGas();
+            if( (actualTime >= c.getStart_traffic()) && (actualTime <= c.getEnd_traffic()) ) {
+                timeByCar = (timeByCar + c.getTimeByCar()) * (c.getTraffic() / 100);
+            } else { timeByCar += c.getTimeByCar(); System.out.print("++"); }
+            fatigue += c.getFatigue();
+            timeByFoot += c.getTimeByFoot();
         }
+        if (timeByFoot == 0) timeByFoot = 1;
+        if (timeByCar == 0) timeByCar = 1;
         speed = isByCar ? distance/timeByCar : distance/timeByFoot;
     }
 }
