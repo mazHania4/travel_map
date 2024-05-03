@@ -8,8 +8,11 @@ import com.edd.graphs.Route;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.*;
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -31,11 +34,11 @@ public class WindowPnl extends JPanel {
     private JComboBox<String> nextNodeCB;
     private JLabel imgLbl;
     private JTable worstTable;
+    private DefaultTableModel tblModel;
     private GraphsCtr graphs;
     private Tree tree;
     private final GraphvizCtr graphviz;
     private int graphCounter, filter, currTime;
-    private Node actualNode;
 
     private String selectedOrigin, selectedDestination, selectedTripType;
 
@@ -45,7 +48,6 @@ public class WindowPnl extends JPanel {
         graphCounter = 0;
         currTime = 0;
         filter = 1;
-        actualNode = null;
         graphs = null;
         tree = null;
         selectedOrigin = "";
@@ -82,9 +84,9 @@ public class WindowPnl extends JPanel {
 
     }
 
-    private void updateImg(java.util.List<Node> nodes, List<Node> route, int lblCase){
+    private void updateImg(java.util.List<Node> nodes, Route route, int lblCase){
         try {
-            graphviz.mapGraph(nodes, route, selectedOrigin, graphCounter, lblCase);
+            graphviz.mapGraph(nodes, route, selectedOrigin, graphCounter, lblCase, currTime);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -115,7 +117,8 @@ public class WindowPnl extends JPanel {
                 String routesContent = readFile(selectedFiles[0]);
                 String trafficContent = readFile(selectedFiles[1]);
                 graphs = new GraphsCtr(routesContent, trafficContent);
-                updateImg(graphs.getNodes().values().stream().toList(), new ArrayList<>(), 1);
+                Route route = new Route();
+                updateImg(graphs.getNodes().values().stream().toList(), route, 1);
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Error al leer los archivos", "Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -135,7 +138,24 @@ public class WindowPnl extends JPanel {
 
     private void treeGraph(){
         if (tree != null){
-
+            try {
+                graphviz.treeGraph(graphCounter, tree);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            String path = "src/main/resources/generated/map_"+graphCounter+".png";
+            ImageIcon imageIcon = new ImageIcon(path);
+            JLabel treeImgLbl = new JLabel(imageIcon);
+            treeImgLbl.revalidate();
+            treeImgLbl.repaint();
+            JPanel panel = new JPanel();
+            panel.add(treeImgLbl);
+            JFrame treeGraphFrame = new JFrame("Diagrama del arbol");
+            treeGraphFrame.setLocationRelativeTo(null);
+            treeGraphFrame.getContentPane().add(panel);
+            treeGraphFrame.pack();
+            treeGraphFrame.setVisible(true);
+            graphCounter++;
         }
     }
     private void newTrip(){
@@ -161,7 +181,6 @@ public class WindowPnl extends JPanel {
                         originTF.setText(selectedOrigin);
                         destTF.setText(selectedDestination);
                         typeTF.setText(selectedTripType);
-                        actualNode = graphs.getNodes().get(selectedOrigin);
                         nextNodeCB.setEnabled(true);
                         updateTrip();
                         newTripFrame.dispose();
@@ -185,17 +204,23 @@ public class WindowPnl extends JPanel {
     private void updateTrip(){
         if (!selectedOrigin.isEmpty() && !selectedOrigin.equals(selectedDestination)) {
             List<Route> routes = graphs.findAllRoutes(selectedOrigin, selectedDestination, selectedTripType.equals("Vehículo"), currTime);
-            //System.out.println("generadas:\n" + routes);
+            //System.out.println("generadas:\n");
+            //routes.forEach(r-> System.out.println(r.toString()+": "+r.getValue(filter)));
             tree = new Tree(filter);
             routes.forEach(r -> tree.insert(r));
             List<Route> routesInOrder = tree.inOrder();
             //System.out.println("ordenadas:\n" + routesInOrder);
-            updateImg(graphs.getNodes().values().stream().toList(), routesInOrder.get(0).getSteps(), filter);
+            updateImg(graphs.getNodes().values().stream().toList(), routesInOrder.get(0), filter);
             nextNodeCB.removeAllItems();
             Set<String> nextIds = new HashSet<>();
             routesInOrder.forEach(r-> nextIds.add(r.getSteps().get(1).getId()));
             nextIds.forEach(n -> nextNodeCB.addItem(n));
-            // update worst table
+            tblModel.setRowCount(0);
+            DecimalFormat df = new DecimalFormat("#.####");
+            df.setRoundingMode(RoundingMode.CEILING);
+            for (Route r : routesInOrder) {
+                tblModel.addRow(new Object[]{r.toString(), df.format(r.getValue(filter))});
+            }
         }
     }
 
@@ -203,7 +228,6 @@ public class WindowPnl extends JPanel {
     private void moveForward() { //to the next node
         if (graphs != null){
             selectedOrigin = (String) nextNodeCB.getSelectedItem();
-            actualNode = graphs.getNodes().get(selectedOrigin);
             updateTrip();
         }
     }
@@ -355,14 +379,23 @@ public class WindowPnl extends JPanel {
         title.setForeground(mainTextColor);
         pnl.add(title);
         pnl.add(Box.createRigidArea(new Dimension(0, 10)));
-        String[][] data = { { "-", "-" }, { "-", "-" }, { "-", "-" }, { "-", "-" }, { "-", "-" } };
-        String[] columnNames = { "Ruta", "Valor" };
-        worstTable = new JTable(data, columnNames);
-        worstTable.getColumnModel().getColumn(0).setPreferredWidth(120);
-        worstTable.getColumnModel().getColumn(1).setPreferredWidth(40);
-        worstTable.setPreferredScrollableViewportSize(worstTable.getPreferredSize());
+        tblModel = new DefaultTableModel() {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        tblModel.addColumn("Ruta");
+        tblModel.addColumn("Valor");
+        worstTable = new JTable(tblModel);
+        MultiLineTableCellRenderer renderer = new MultiLineTableCellRenderer();
+        worstTable.setDefaultRenderer(Object.class, renderer);
+        worstTable.getColumnModel().getColumn(0).setPreferredWidth(150);
+        worstTable.getColumnModel().getColumn(1).setPreferredWidth(20);
+        worstTable.getColumnModel().getColumn(0).setCellRenderer(renderer);
+        worstTable.getColumnModel().getColumn(1).setCellRenderer(renderer);
+        worstTable.setPreferredScrollableViewportSize(new Dimension(180, 1000));
         JScrollPane sp = new JScrollPane(worstTable);
-
         pnl.add(sp);
         return pnl;
     }
@@ -402,3 +435,4 @@ public class WindowPnl extends JPanel {
         return pnl;
     }
 }
+

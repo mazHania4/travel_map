@@ -1,7 +1,7 @@
 package com.edd.controller;
 
-import com.edd.graphs.Node;
 import com.edd.graphs.Route;
+import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,9 +20,8 @@ class Pag {
 
 public class Tree {
 
-
-    private Pag root;
-    private int comCase;
+    @Getter private Pag root;
+    private final int comCase;
     private final int m;
 
     public Tree(int comCase) {
@@ -46,34 +45,25 @@ public class Tree {
         }
     }
 
-    private int getValue(Route r){
-        return switch (comCase){
-            case 2 -> r.getFatigue();
-            case 3 -> r.getGas();
-            case 4 -> r.getDistance() / r.getFatigue();
-            case 5 -> r.getDistance() / r.getGas();
-            case 6 -> r.getSpeed();
-            default -> r.getDistance();
-        };
-    }
+
 
     private void insertNotFull(Pag pag, Route clave) {
         int i = pag.values.size() - 1;
         if (pag.isLeaf) {
             pag.values.add(null);
-            while (i >= 0 && getValue(pag.values.get(i)) > getValue(clave)) {
+            while (i >= 0 && pag.values.get(i).getValue(comCase) > clave.getValue(comCase)) {
                 pag.values.set(i + 1, pag.values.get(i));
                 i--;
             }
             pag.values.set(i + 1, clave);
         } else {
-            while (i >= 0 && getValue(pag.values.get(i)) > getValue(clave)) {
+            while (i >= 0 && pag.values.get(i).getValue(comCase) > clave.getValue(comCase)) {
                 i--;
             }
             i++;
             if (pag.children.get(i).values.size() == m - 1) {
                 divide(pag, i, pag.children.get(i));
-                if (getValue(pag.values.get(i)) < getValue(clave)) {
+                if (pag.values.get(i).getValue(comCase) < clave.getValue(comCase)) {
                     i++;
                 }
             }
